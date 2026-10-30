@@ -1,1 +1,137 @@
 
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>شجرة عائلة حماد الحساني</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:Arial;background:#f2f6f2;margin:0;color:#173d2c}
+header{background:#164d36;color:white;text-align:center;padding:30px 12px}
+h1{font-size:27px}
+main{max-width:850px;margin:20px auto;padding:12px}
+.box{background:white;border-radius:15px;padding:18px;margin-bottom:18px;box-shadow:0 3px 12px #0001}
+input,select,textarea,button{width:100%;padding:13px;margin:7px 0;border:1px solid #ddd;border-radius:9px;box-sizing:border-box;font-size:16px}
+button{background:#176b49;color:white;border:0;font-weight:bold}
+.person{background:#e6f2e9;border:2px solid #397c56;border-radius:12px;padding:13px;margin:12px auto;text-align:center;max-width:220px}
+.children{border-right:2px solid #aac9b2;margin-right:50%;padding-right:10px}
+.small{font-size:13px;color:#617568}
+</style>
+</head>
+<body>
+<header>
+<h1>🌳 شجرة عائلة حماد الحساني</h1>
+<p>حفظ الأنساب وصلة الرحم</p>
+</header>
+<main>
+<div class="box">
+<h2>شجرة العائلة</h2>
+<input id="search" placeholder="ابحث عن اسم..." oninput="render()">
+<div id="tree">جار تحميل الشجرة...</div>
+<button onclick="load()">تحديث الشجرة</button>
+</div>
+
+<div class="box">
+<h2>إضافة فرد جديد للعائلة</h2>
+<form id="form">
+<input id="name" placeholder="الاسم الكامل" required>
+<select id="father" required>
+<option value="">اختر الأب</option>
+</select>
+<select id="gender">
+<option value="ذكر">ذكر</option>
+<option value="أنثى">أنثى</option>
+</select>
+<input id="year" type="number" placeholder="سنة الميلاد (اختياري)">
+<textarea id="notes" placeholder="ملاحظات"></textarea>
+<button type="submit">إرسال الإضافة للمراجعة</button>
+</form>
+<p id="message" class="small"></p>
+</div>
+</main>
+
+<script>
+const URL = "https://qleyadtabwwrdperyqgr.supabase.co";
+const KEY = "sb_publishable_HxWROZ26z3nckHYKT8Y5-Q_KRxLXDLd";
+const db = supabase.createClient(URL,KEY);
+
+let people=[];
+
+function esc(s){
+ return String(s??'').replace(/[&<>"']/g,c=>({
+ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+ }[c]));
+}
+
+function branch(parent,level=0){
+ const children=people.filter(p=>p.father_id===parent);
+ if(!children.length)return '';
+ return children.map(p=>`
+ <div style="margin-right:${level*12}px">
+ <div class="person">
+ <b>${esc(p.name)}</b>
+ <div class="small">${esc(p.gender||'')}</div>
+ </div>
+ ${branch(p.id,level+1)}
+ </div>`).join('');
+}
+
+function render(){
+ const q=document.getElementById('search').value.trim().toLowerCase();
+ const tree=document.getElementById('tree');
+ const roots=people.filter(p=>!p.father_id);
+ if(q){
+ const found=people.filter(p=>p.name.toLowerCase().includes(q));
+ tree.innerHTML=found.length?found.map(p=>`<div class="person">${esc(p.name)}</div>`).join(''):'لا توجد نتائج';
+ }else{
+ tree.innerHTML=roots.map(p=>`
+ <div class="person"><b>${esc(p.name)}</b><div class="small">الجد المؤسس</div></div>
+ ${branch(p.id)}
+ `).join('');
+ }
+ const sel=document.getElementById('father');
+ const old=sel.value;
+ sel.innerHTML='<option value="">اختر الأب</option>'+people.map(p=>
+ `<option value="${esc(p.id)}">${esc(p.name)}</option>`
+ ).join('');
+ if(people.some(p=>p.id===old))sel.value=old;
+}
+
+async function load(){
+ const {data,error}=await db.from('family_members')
+ .select('id,name,father_id,gender,birth_year')
+ .order('name');
+ if(error){
+ document.getElementById('tree').textContent='تعذر تحميل الشجرة. تحقق من إعدادات الربط.';
+ return;
+ }
+ people=data||[];
+ render();
+}
+
+document.getElementById('form').onsubmit=async function(e){
+ e.preventDefault();
+ const msg=document.getElementById('message');
+ const payload={
+ name:document.getElementById('name').value.trim(),
+ father_id:document.getElementById('father').value,
+ gender:document.getElementById('gender').value,
+ birth_year:document.getElementById('year').value?
+ Number(document.getElementById('year').value):null,
+ notes:document.getElementById('notes').value.trim()||null
+ };
+ const {error}=await db.from('family_suggestions').insert(payload);
+ if(error){
+ msg.textContent='تعذر إرسال الطلب. حاول مرة أخرى.';
+ }else{
+ msg.textContent='تم إرسال الاسم للمراجعة بنجاح.';
+ this.reset();
+ }
+};
+
+load();
+</script>
+</body>
+</html>
+ 
