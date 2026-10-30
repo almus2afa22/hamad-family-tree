@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -7,56 +6,94 @@
 <title>شجرة عائلة حماد الحساني</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
+*{box-sizing:border-box}
 body{font-family:Arial;background:#f2f6f2;margin:0;color:#173d2c}
-header{background:#164d36;color:white;text-align:center;padding:30px 12px}
-h1{font-size:27px}
-main{max-width:850px;margin:20px auto;padding:12px}
+header{background:#164d36;color:white;text-align:center;padding:28px 12px}
+h1{font-size:25px}
+main{max-width:900px;margin:20px auto;padding:12px}
 .box{background:white;border-radius:15px;padding:18px;margin-bottom:18px;box-shadow:0 3px 12px #0001}
-input,select,textarea,button{width:100%;padding:13px;margin:7px 0;border:1px solid #ddd;border-radius:9px;box-sizing:border-box;font-size:16px}
-button{background:#176b49;color:white;border:0;font-weight:bold}
-.person{background:#e6f2e9;border:2px solid #397c56;border-radius:12px;padding:13px;margin:12px auto;text-align:center;max-width:220px}
-.children{border-right:2px solid #aac9b2;margin-right:50%;padding-right:10px}
+input,select,textarea,button{width:100%;padding:13px;margin:7px 0;border:1px solid #ddd;border-radius:9px;font-size:16px}
+button{background:#176b49;color:white;border:0;font-weight:bold;cursor:pointer}
+.secondary{background:#e7f0e9;color:#174d35}
+.danger{background:#a83232}
+.person{background:#e6f2e9;border:2px solid #397c56;border-radius:12px;padding:13px;margin:12px auto;text-align:center;max-width:260px}
 .small{font-size:13px;color:#617568}
+.hidden{display:none!important}
+.suggestion{border:1px solid #dce8df;border-radius:10px;padding:12px;margin:10px 0}
+.row{display:flex;gap:8px}
+.row button{flex:1}
+@media(max-width:520px){.row{flex-direction:column}}
 </style>
 </head>
 <body>
+
 <header>
 <h1>🌳 شجرة عائلة حماد الحساني</h1>
 <p>حفظ الأنساب وصلة الرحم</p>
 </header>
-<main>
-<div class="box">
-<h2>شجرة العائلة</h2>
-<input id="search" placeholder="ابحث عن اسم..." oninput="render()">
-<div id="tree">جار تحميل الشجرة...</div>
-<button onclick="load()">تحديث الشجرة</button>
-</div>
 
-<div class="box">
+<main>
+
+<section class="box">
+<h2>شجرة العائلة</h2>
+<input id="search" placeholder="ابحث عن اسم..." oninput="renderTree()">
+<div id="tree">جار تحميل الشجرة...</div>
+<button class="secondary" onclick="loadPeople()">تحديث الشجرة</button>
+</section>
+
+<section class="box">
 <h2>إضافة فرد جديد للعائلة</h2>
-<form id="form">
-<input id="name" placeholder="الاسم الكامل" required>
-<select id="father" required>
-<option value="">اختر الأب</option>
-</select>
+<p class="small">اكتب اسم الأب أو اختره من الأسماء الموجودة. لإضافة الجد المؤسس اترك خانة الأب فارغة.</p>
+
+<form id="suggestionForm">
+<input id="name" placeholder="الاسم الكامل" required maxlength="150">
+
+<input id="fatherName" list="fatherList"
+placeholder="اكتب اسم الأب أو اختره من القائمة">
+<datalist id="fatherList"></datalist>
+
 <select id="gender">
 <option value="ذكر">ذكر</option>
 <option value="أنثى">أنثى</option>
 </select>
-<input id="year" type="number" placeholder="سنة الميلاد (اختياري)">
-<textarea id="notes" placeholder="ملاحظات"></textarea>
+
+<input id="year" type="number" placeholder="سنة الميلاد (اختياري)" min="1000" max="2100">
+<textarea id="notes" placeholder="ملاحظات (اختياري)" rows="3"></textarea>
 <button type="submit">إرسال الإضافة للمراجعة</button>
 </form>
+
 <p id="message" class="small"></p>
+</section>
+
+<section class="box">
+<h2>دخول مسؤول الشجرة</h2>
+
+<div id="loginPanel">
+<form id="loginForm">
+<input id="email" type="email" placeholder="البريد الإلكتروني" required>
+<input id="password" type="password" placeholder="كلمة المرور" required>
+<button type="submit">تسجيل الدخول</button>
+</form>
 </div>
+
+<div id="adminPanel" class="hidden">
+<p>لوحة إدارة طلبات العائلة</p>
+<button class="secondary" onclick="loadSuggestions()">تحديث الطلبات</button>
+<div id="suggestions">جار تحميل الطلبات...</div>
+<button class="danger" onclick="logout()">تسجيل الخروج</button>
+</div>
+
+<p id="authMessage" class="small"></p>
+</section>
+
 </main>
 
 <script>
 const URL = "https://qleyadtabwwrdperyqgr.supabase.co";
 const KEY = "sb_publishable_HxWROZ26z3nckHYKT8Y5-Q_KRxLXDLd";
-const db = supabase.createClient(URL,KEY);
+const db = supabase.createClient(URL, KEY);
 
-let people=[];
+let people = [];
 
 function esc(s){
  return String(s??'').replace(/[&<>"']/g,c=>({
@@ -64,74 +101,206 @@ function esc(s){
  }[c]));
 }
 
-function branch(parent,level=0){
- const children=people.filter(p=>p.father_id===parent);
- if(!children.length)return '';
- return children.map(p=>`
- <div style="margin-right:${level*12}px">
- <div class="person">
- <b>${esc(p.name)}</b>
- <div class="small">${esc(p.gender||'')}</div>
- </div>
- ${branch(p.id,level+1)}
- </div>`).join('');
+function branch(parent,level=0,seen=new Set()){
+ const children=people.filter(p=>p.father_id===parent&&!seen.has(p.id));
+ return children.map(p=>{
+  const next=new Set(seen);
+  next.add(p.id);
+  return `
+  <div style="margin-right:${Math.min(level*12,120)}px">
+   <div class="person">
+    <b>${esc(p.name)}</b>
+    <div class="small">${esc(p.gender||'')}${p.birth_year?' · '+esc(p.birth_year):''}</div>
+   </div>
+   ${branch(p.id,level+1,next)}
+  </div>`;
+ }).join('');
 }
 
-function render(){
+function renderTree(){
  const q=document.getElementById('search').value.trim().toLowerCase();
  const tree=document.getElementById('tree');
  const roots=people.filter(p=>!p.father_id);
+
  if(q){
- const found=people.filter(p=>p.name.toLowerCase().includes(q));
- tree.innerHTML=found.length?found.map(p=>`<div class="person">${esc(p.name)}</div>`).join(''):'لا توجد نتائج';
+  const found=people.filter(p=>String(p.name||'').toLowerCase().includes(q));
+  tree.innerHTML=found.length
+   ?found.map(p=>'<div class="person"><b>'+esc(p.name)+'</b></div>').join('')
+   :'لا توجد نتائج';
  }else{
- tree.innerHTML=roots.map(p=>`
- <div class="person"><b>${esc(p.name)}</b><div class="small">الجد المؤسس</div></div>
- ${branch(p.id)}
- `).join('');
+  tree.innerHTML=roots.length
+   ?roots.map(p=>'<div class="person"><b>'+esc(p.name)+'</b><div class="small">الجد المؤسس</div></div>'+branch(p.id,0,new Set([p.id]))).join('')
+   :'لم تتم إضافة أسماء بعد. ابدأ بإضافة الجد المؤسس حماد.';
  }
- const sel=document.getElementById('father');
- const old=sel.value;
- sel.innerHTML='<option value="">اختر الأب</option>'+people.map(p=>
- `<option value="${esc(p.id)}">${esc(p.name)}</option>`
- ).join('');
- if(people.some(p=>p.id===old))sel.value=old;
+
+ const list=document.getElementById('fatherList');
+ list.innerHTML=people.map(p=>'<option value="'+esc(p.name)+'"></option>').join('');
 }
 
-async function load(){
+async function loadPeople(){
  const {data,error}=await db.from('family_members')
- .select('id,name,father_id,gender,birth_year')
- .order('name');
+  .select('id,name,father_id,gender,birth_year')
+  .order('name');
+
  if(error){
- document.getElementById('tree').textContent='تعذر تحميل الشجرة. تحقق من إعدادات الربط.';
- return;
+  document.getElementById('tree').textContent='تعذر تحميل الشجرة. تحقق من إعدادات قاعدة البيانات.';
+  return;
  }
+
  people=data||[];
- render();
+ renderTree();
 }
 
-document.getElementById('form').onsubmit=async function(e){
+document.getElementById('suggestionForm').addEventListener('submit',async function(e){
  e.preventDefault();
- const msg=document.getElementById('message');
- const payload={
- name:document.getElementById('name').value.trim(),
- father_id:document.getElementById('father').value,
- gender:document.getElementById('gender').value,
- birth_year:document.getElementById('year').value?
- Number(document.getElementById('year').value):null,
- notes:document.getElementById('notes').value.trim()||null
- };
- const {error}=await db.from('family_suggestions').insert(payload);
- if(error){
- msg.textContent='تعذر إرسال الطلب. حاول مرة أخرى.';
- }else{
- msg.textContent='تم إرسال الاسم للمراجعة بنجاح.';
- this.reset();
- }
-};
 
-load();
+ const msg=document.getElementById('message');
+ const fatherText=document.getElementById('fatherName').value.trim();
+
+ let fatherId=null;
+
+ if(fatherText){
+  const father=people.find(p=>p.name.trim().toLowerCase()===fatherText.toLowerCase());
+
+  if(!father){
+   msg.textContent='اسم الأب غير موجود في الشجرة. أرسل إضافة الأب أولًا واعتمدها، ثم أضف الابن.';
+   return;
+  }
+
+  fatherId=father.id;
+ }
+
+ msg.textContent='جار إرسال الطلب...';
+
+ const year=document.getElementById('year').value;
+
+ const payload={
+  name:document.getElementById('name').value.trim(),
+  father_id:fatherId,
+  gender:document.getElementById('gender').value,
+  birth_year:year?Number(year):null,
+  notes:document.getElementById('notes').value.trim()||null
+ };
+
+ const {error}=await db.from('family_suggestions').insert(payload);
+
+ if(error){
+  msg.textContent='تعذر إرسال الطلب. حاول مرة أخرى.';
+  return;
+ }
+
+ msg.textContent='تم إرسال الاسم للمراجعة بنجاح. سيظهر بعد اعتماد المسؤول.';
+ this.reset();
+});
+
+async function showSession(session){
+ const login=document.getElementById('loginPanel');
+ const admin=document.getElementById('adminPanel');
+ const msg=document.getElementById('authMessage');
+
+ if(!session){
+  login.classList.remove('hidden');
+  admin.classList.add('hidden');
+  return;
+ }
+
+ const {data,error}=await db.rpc('is_family_admin');
+
+ if(error||data!==true){
+  await db.auth.signOut();
+  login.classList.remove('hidden');
+  admin.classList.add('hidden');
+  msg.textContent='هذا الحساب ليس ضمن مسؤولي الشجرة.';
+  return;
+ }
+
+ login.classList.add('hidden');
+ admin.classList.remove('hidden');
+ msg.textContent='';
+ loadSuggestions();
+}
+
+document.getElementById('loginForm').addEventListener('submit',async function(e){
+ e.preventDefault();
+
+ const msg=document.getElementById('authMessage');
+ msg.textContent='جار تسجيل الدخول...';
+
+ const {data,error}=await db.auth.signInWithPassword({
+  email:document.getElementById('email').value.trim(),
+  password:document.getElementById('password').value
+ });
+
+ if(error){
+  msg.textContent='تعذر تسجيل الدخول. تحقق من البريد وكلمة المرور.';
+  return;
+ }
+
+ await showSession(data.session);
+});
+
+async function loadSuggestions(){
+ const target=document.getElementById('suggestions');
+ target.textContent='جار تحميل الطلبات...';
+
+ const {data,error}=await db.from('family_suggestions')
+  .select('*').order('created_at',{ascending:true});
+
+ if(error){
+  target.textContent='تعذر تحميل الطلبات. تحقق من صلاحيات المسؤول.';
+  return;
+ }
+
+ if(!data||!data.length){
+  target.textContent='لا توجد طلبات جديدة.';
+  return;
+ }
+
+ target.innerHTML=data.map(s=>{
+  const father=people.find(p=>p.id===s.father_id);
+  return `
+  <div class="suggestion">
+   <b>${esc(s.name)}</b>
+   <div class="small">الأب: ${esc(father?.name||'بدون أب مسجل')} · ${esc(s.gender||'')}</div>
+   ${s.birth_year?'<div class="small">سنة الميلاد: '+esc(s.birth_year)+'</div>':''}
+   ${s.notes?'<p>'+esc(s.notes)+'</p>':''}
+   <div class="row">
+    <button onclick="reviewSuggestion('${esc(s.id)}',true)">اعتماد</button>
+    <button class="danger" onclick="reviewSuggestion('${esc(s.id)}',false)">رفض</button>
+   </div>
+  </div>`;
+ }).join('');
+}
+
+async function reviewSuggestion(id,approve){
+ const msg=document.getElementById('authMessage');
+ msg.textContent=approve?'جار اعتماد الاسم...':'جار رفض الطلب...';
+
+ const fn=approve?'approve_family_suggestion':'reject_family_suggestion';
+ const {error}=await db.rpc(fn,{suggestion_id:id});
+
+ if(error){
+  msg.textContent='لم تنجح العملية: '+(error.message||'');
+  return;
+ }
+
+ msg.textContent=approve?'تم اعتماد الاسم وإضافته للشجرة.':'تم رفض الطلب.';
+ await loadPeople();
+ await loadSuggestions();
+}
+
+async function logout(){
+ await db.auth.signOut();
+ document.getElementById('authMessage').textContent='تم تسجيل الخروج.';
+}
+
+db.auth.onAuthStateChange((_event,session)=>{
+ setTimeout(()=>showSession(session),0);
+});
+
+loadPeople();
+db.auth.getSession().then(({data})=>showSession(data.session));
 </script>
+
 </body>
 </html>
- 
