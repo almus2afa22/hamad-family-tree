@@ -14,6 +14,7 @@ main{max-width:850px;margin:20px auto;padding:12px}
 .box{background:white;padding:18px;border-radius:14px;margin-bottom:18px;box-shadow:0 2px 10px #0001}
 input,select,textarea,button{width:100%;padding:13px;margin:7px 0;border:1px solid #ddd;border-radius:9px;font-size:16px}
 button{background:#176b49;color:white;border:0;font-weight:bold}
+button:disabled{opacity:.6}
 .danger{background:#a83232}
 .secondary{background:#e7f0e9;color:#174d35}
 .person,.suggestion{padding:13px;margin:10px auto;border-radius:10px;background:#e6f2e9;border:1px solid #397c56}
@@ -28,6 +29,7 @@ button{background:#176b49;color:white;border:0;font-weight:bold}
 </style>
 </head>
 <body>
+
 <header>
 <h1>🌳 شجرة عائلة حماد الحساني</h1>
 <p>حفظ الأنساب وصلة الرحم</p>
@@ -81,11 +83,11 @@ button{background:#176b49;color:white;border:0;font-weight:bold}
 
 <script>
 (function(){
-const URL = "https://qleyadtabwwrdperyqgr.supabase.co";
-const KEY = "sb_publishable_HxWROZ26z3nckHYKT8Y5-Q_KRxLXDLd";
+const URL="https://qleyadtabwwrdperyqgr.supabase.co";
+const KEY="sb_publishable_HxWROZ26z3nckHYKT8Y5-Q_KRxLXDLd";
 
-let db = null;
-let people = [];
+let db=null;
+let people=[];
 
 function el(id){return document.getElementById(id)}
 function message(id,text){el(id).textContent=text}
@@ -98,7 +100,7 @@ function escapeHTML(value){
 
 function init(){
  if(!window.supabase){
-  message('authMessage','خطأ: لم يتم تحميل مكتبة Supabase. تحقق من اتصال الإنترنت.');
+  message('authMessage','تعذر تحميل مكتبة Supabase. تحقق من الإنترنت.');
   return;
  }
  db=window.supabase.createClient(URL,KEY);
@@ -115,12 +117,14 @@ function drawBranch(parent,level=0,seen=[]){
 window.drawTree=function(){
  const q=el('search').value.trim().toLowerCase();
  const roots=people.filter(p=>!p.father_id);
+
  if(q){
   const matches=people.filter(p=>p.name.toLowerCase().includes(q));
   el('tree').innerHTML=matches.length?matches.map(p=>'<div class="person">'+escapeHTML(p.name)+'</div>').join(''):'لا توجد نتائج';
  }else{
   el('tree').innerHTML=roots.length?roots.map(p=>'<div class="person"><b>'+escapeHTML(p.name)+'</b><div class="small">الجد المؤسس</div></div>'+drawBranch(p.id,0,[p.id])).join(''):'لا توجد أسماء مسجلة حتى الآن.';
  }
+
  el('fatherOptions').innerHTML=people.map(p=>'<option value="'+escapeHTML(p.name)+'"></option>').join('');
 };
 
@@ -140,13 +144,19 @@ el('addForm').addEventListener('submit',async function(e){
  try{
   const fatherText=el('fatherName').value.trim();
   let fatherId=null;
+
   if(fatherText){
    const father=people.find(p=>p.name.trim().toLowerCase()===fatherText.toLowerCase());
-   if(!father){message('addMessage','اسم الأب غير موجود. أضف الأب واعتمد اسمه أولًا.');return;}
+   if(!father){
+    message('addMessage','اسم الأب غير موجود. أضف الأب واعتمد اسمه أولًا.');
+    return;
+   }
    fatherId=father.id;
   }
+
   message('addMessage','جار إرسال الطلب...');
   const year=el('birthYear').value;
+
   const {error}=await db.from('family_suggestions').insert({
    name:el('personName').value.trim(),
    father_id:fatherId,
@@ -154,6 +164,7 @@ el('addForm').addEventListener('submit',async function(e){
    birth_year:year?Number(year):null,
    notes:el('notes').value.trim()||null
   });
+
   if(error)throw error;
   this.reset();
   message('addMessage','تم إرسال الاسم بنجاح للمراجعة.');
@@ -165,15 +176,14 @@ el('addForm').addEventListener('submit',async function(e){
 async function checkAdmin(){
  const {data,error}=await db.rpc('is_family_admin');
  if(error)throw error;
- if(data!==true)throw new Error('الحساب ليس مسجلًا كمسؤول في قاعدة البيانات.');
- return true;
+ if(data!==true)throw new Error('هذا الحساب غير مسجل كمسؤول.');
 }
 
 async function showAdmin(){
  await checkAdmin();
  el('loginPanel').classList.add('hidden');
  el('adminPanel').classList.remove('hidden');
- message('authMessage','تم تسجيل الدخول بنجاح. أنت الآن في لوحة المسؤول.');
+ message('authMessage','تم تسجيل الدخول بنجاح.');
  await loadSuggestions();
 }
 
@@ -181,9 +191,10 @@ el('loginForm').addEventListener('submit',async function(e){
  e.preventDefault();
  const btn=el('loginButton');
  btn.disabled=true;
- message('authMessage','جار التحقق من البريد وكلمة المرور...');
+ message('authMessage','جار التحقق من بيانات الدخول...');
+
  try{
-  const {data,error}=await db.auth.signInWithPassword({
+  const {error}=await db.auth.signInWithPassword({
    email:el('email').value.trim(),
    password:el('password').value
   });
@@ -193,7 +204,7 @@ el('loginForm').addEventListener('submit',async function(e){
   await db.auth.signOut();
   el('loginPanel').classList.remove('hidden');
   el('adminPanel').classList.add('hidden');
-  message('authMessage','تعذر الدخول: '+(e.message||'خطأ غير معروف'));
+  message('authMessage','تعذر الدخول: '+e.message);
  }finally{
   btn.disabled=false;
  }
@@ -202,18 +213,40 @@ el('loginForm').addEventListener('submit',async function(e){
 window.loadSuggestions=async function(){
  const target=el('suggestions');
  target.textContent='جار تحميل الطلبات...';
+
  try{
   const {data,error}=await db.from('family_suggestions').select('*').order('created_at');
   if(error)throw error;
-  if(!data||data.length===0){target.textContent='لا توجد طلبات جديدة للمراجعة.';return;}
+
+  if(!data||data.length===0){
+   target.textContent='لا توجد طلبات جديدة للمراجعة.';
+   return;
+  }
+
   target.innerHTML=data.map(s=>{
    const father=people.find(p=>p.id===s.father_id);
-   return '<div class="suggestion"><b>'+escapeHTML(s.name)+'</b><p class="small">الأب: '+escapeHTML(father?father.name:'بدون أب مسجل')+' | '+escapeHTML(s.gender||'')+'</p>'+(s.birth_year?'<p>الميلاد: '+escapeHTML(s.birth_year)+'</p>':'')+(s.notes?'<p>'+escapeHTML(s.notes)+'</p>':'')+'<div class="row"><button onclick="reviewOne(\\''+s.id+'\\',true)">اعتماد</button><button class="danger" onclick="reviewOne(\\''+s.id+'\\',false)">رفض</button></div></div>';
+   return '<div class="suggestion">'+
+    '<b>'+escapeHTML(s.name)+'</b>'+
+    '<p class="small">الأب: '+escapeHTML(father?father.name:'بدون أب مسجل')+' | '+escapeHTML(s.gender||'')+'</p>'+
+    (s.birth_year?'<p>الميلاد: '+escapeHTML(s.birth_year)+'</p>':'')+
+    (s.notes?'<p>'+escapeHTML(s.notes)+'</p>':'')+
+    '<div class="row">'+
+    '<button data-review-id="'+escapeHTML(s.id)+'" data-approve="yes">اعتماد</button>'+
+    '<button class="danger" data-review-id="'+escapeHTML(s.id)+'" data-approve="no">رفض</button>'+
+    '</div></div>';
   }).join('');
+
  }catch(e){
   target.textContent='خطأ في تحميل الطلبات: '+e.message;
  }
 };
+
+el('suggestions').addEventListener('click',function(event){
+ const button=event.target.closest('button[data-review-id]');
+ if(button){
+  window.reviewOne(button.dataset.reviewId,button.dataset.approve==='yes');
+ }
+});
 
 window.reviewOne=async function(id,approve){
  try{
@@ -221,9 +254,11 @@ window.reviewOne=async function(id,approve){
   const fn=approve?'approve_family_suggestion':'reject_family_suggestion';
   const {error}=await db.rpc(fn,{suggestion_id:id});
   if(error)throw error;
+
   message('authMessage',approve?'تم اعتماد الاسم وإضافته للشجرة.':'تم رفض الطلب.');
   await loadPeople();
   await loadSuggestions();
+
  }catch(e){
   message('authMessage','تعذر تنفيذ العملية: '+e.message);
  }
