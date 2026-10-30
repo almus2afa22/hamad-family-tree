@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>شجرة عائلة حماد الحساني</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;background:#f2f6f2;margin:0;color:#173d2c}
+header{background:#164d36;color:#fff;text-align:center;padding:22px 10px}main{max-width:900px;margin:18px auto;padding:12px}
+.box{background:#fff;padding:17px;border-radius:14px;margin-bottom:16px;box-shadow:0 2px 10px #0001}
+input,select,textarea,button{width:100%;padding:12px;margin:6px 0;border:1px solid #ddd;border-radius:9px;font-size:16px}
+button{background:#176b49;color:#fff;border:0;font-weight:bold;cursor:pointer}.secondary{background:#e7f0e9;color:#174d35}.danger{background:#a83232}
+.person{background:#e6f2e9;border:1px solid #397c56;border-radius:10px;padding:12px;margin:9px auto;max-width:560px;text-align:center}
+.wife{background:#fff4df;border:1px solid #d9ad5d;border-radius:8px;padding:8px;margin:8px auto;max-width:500px}
+.child{margin:8px 12px 8px 0;border-right:2px solid #9ab7a2;padding-right:10px}
+.small{font-size:13px;color:#617568}.status{padding:10px;background:#edf3ed;border-radius:8px;margin:8px 0;white-space:pre-wrap}
+.hidden{display:none}.row{display:flex;gap:8px}.row>*{flex:1}.suggestion{padding:12px;border:1px solid #ddd;border-radius:10px;margin:9px 0;background:#fff}
+.admin-actions{display:flex;gap:6px;margin-top:8px}.admin-actions button{font-size:14px;padding:9px}
+@media(max-width:520px){.row,.admin-actions{flex-direction:column}}
+</style>
+</head>
+<body>
+<header><h1>🌳 شجرة عائلة حماد الحساني</h1><p>حفظ الأنساب وصلة الرحم</p></header>
+<main>
+<section class="box">
+<h2>شجرة العائلة</h2>
+<input id="search" placeholder="ابحث عن اسم..." oninput="drawTree()">
+<div id="tree">جار تحميل الشجرة...</div>
+<button class="secondary" onclick="loadAll()">تحديث الشجرة</button>
+</section>
+
+<section class="box">
+<h2>إضافة فرد جديد</h2>
+<p class="small">اختر الأب من الأسماء المسجلة. اتركه فارغًا لإضافة الجد المؤسس.</p>
+<form id="addPerson">
+<input id="personName" placeholder="الاسم الكامل" required>
+<select id="fatherSelect"><option value="">بدون أب (الجد المؤسس)</option></select>
+<select id="motherSelect" disabled><option value="">اختر الأم (اختياري)</option></select>
+<select id="gender"><option value="ذكر">ذكر</option><option value="أنثى">أنثى</option></select>
+<input id="birthYear" type="number" placeholder="سنة الميلاد (اختياري)">
+<textarea id="notes" placeholder="ملاحظات (اختياري)"></textarea>
+<button type="submit">إرسال للمراجعة</button>
+</form><div id="personMessage" class="status"></div>
+</section>
+
+<section class="box">
+<h2>إضافة زوجة</h2>
+<p class="small">اختر الزوج من أفراد العائلة، ثم اكتب اسم الزوجة. سيُرسل الطلب للمسؤول للمراجعة.</p>
+<form id="addWife">
+<select id="husbandSelect" required><option value="">اختر الزوج</option></select>
+<input id="wifeName" placeholder="اسم الزوجة الكامل" required>
+<textarea id="wifeNotes" placeholder="ملاحظات (اختياري)"></textarea>
+<button type="submit">إرسال طلب إضافة الزوجة</button>
+</form><div id="wifeMessage" class="status"></div>
+</section>
+
+<section class="box">
+<h2>دخول مسؤول الشجرة</h2>
+<div id="loginPanel">
+<form id="loginForm">
+<input id="email" type="email" placeholder="البريد الإلكتروني" required>
+<input id="password" type="password" placeholder="كلمة المرور" required>
+<button id="loginButton" type="submit">تسجيل الدخول</button>
+</form></div>
+<div id="adminPanel" class="hidden">
+<h3>طلبات إضافة أفراد العائلة</h3><div id="personRequests" class="status">...</div>
+<h3>طلبات إضافة الزوجات</h3><div id="wifeRequests" class="status">...</div>
+<button class="secondary" onclick="loadAll();loadRequests()">تحديث الطلبات والشجرة</button>
+<button class="danger" onclick="logout()">تسجيل الخروج</button>
+</div>
+<div id="authMessage" class="status">أدخل بيانات المسؤول لتسجيل الدخول.</div>
+</section>
+</main>
+<script>
+(()=>{
+const URL="https://qleyadtabwwrdperyqgr.supabase.co";
+const KEY="sb_publishable_HxWROZ26z3nckHYKT8Y5-Q_KRxLXDLd";
+const db=window.supabase.createClient(URL,KEY);
+let people=[],wives=[],isAdmin=false;
+const $=id=>document.getElementById(id);
+const msg=(id,t)=>$(id).textContent=t;
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const person=id=>people.find(p=>p.id===id);
+const wife=id=>wives.find(w=>w.id===id);
+
+async function loadAll(){
+ try{
+  const [p,w]=await Promise.all([
+   db.from("family_members").select("*").order("name"),
+   db.from("family_wives").select("*").order("name")
+  ]);
+  if(p.error)throw p.error;if(w.error)throw w.error;
+  people=p.data||[];wives=w.data||[];
+  fillSelects();drawTree();
+ }catch(e){msg("tree","تعذر تحميل الشجرة: "+e.message)}
+}
+function fillSelects(){
+ const oldFather=$("fatherSelect").value,oldHusband=$("husbandSelect").value,oldMother=$("motherSelect").value;
+ $("fatherSelect").innerHTML='<option value="">بدون أب (الجد المؤسس)</option>'+people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+ $("husbandSelect").innerHTML='<option value="">اختر الزوج</option>'+people.filter(p=>p.gender!=="أنثى").map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+ if(oldFather&&person(oldFather))$("fatherSelect").value=oldFather;
+ if(oldHusband&&person(oldHusband))$("husbandSelect").value=oldHusband;
+ updateMotherSelect(oldMother);
+}
+function updateMotherSelect(old=""){
+ const fatherId=$("fatherSelect").value;
+ const options=wives.filter(w=>w.husband_id===fatherId);
+ $("motherSelect").innerHTML='<option value="">الأم (اختياري)</option>'+options.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join("");
+ $("motherSelect").disabled=!fatherId||!options.length;
+ if(old&&options.some(w=>w.id===old))$("motherSelect").value=old;
+}
+$("fatherSelect").addEventListener("change",()=>updateMotherSelect());
+function branch(parentId,level=0,seen=[]){
+ return people.filter(p=>p.father_id===parentId&&!seen.includes(p.id)).map(p=>{
+  const pw=wives.filter(w=>w.husband_id===p.id);
+  const wifeHtml=pw.map(w=>`<div class="wife">👩 الزوجة: <b>${esc(w.name)}</b>${isAdmin?`<div class="admin-actions"><button class="secondary" onclick="editWife('${w.id}')">تعديل</button><button class="danger" onclick="deleteWife('${w.id}')">حذف</button></div>`:""}</div>`).join("");
+  const kids=people.filter(k=>k.father_id===p.id);
+  const children=kids.map(k=>{
+   const mom=wife(k.mother_id);
+   return `<div class="child"><div class="person"><b>${esc(k.name)}</b><div class="small">${esc(k.gender||"")}${mom?" · الأم: "+esc(mom.name):""}</div>${isAdmin?`<div class="admin-actions"><button class="secondary" onclick="editPerson('${k.id}')">تعديل</button><button class="danger" onclick="deletePerson('${k.id}')">حذف</button></div>`:""}</div>${branch(k.id,level+1,[...seen,p.id,k.id])}</div>`;
+  }).join("");
+  return `<div style="margin-right:${Math.min(level*10,80)}px"><div class="person"><b>${esc(p.name)}</b><div class="small">${esc(p.gender||"")}${p.birth_year?" · "+esc(p.birth_year):""}</div>${isAdmin?`<div class="admin-actions"><button class="secondary" onclick="editPerson('${p.id}')">تعديل</button><button class="danger" onclick="deletePerson('${p.id}')">حذف</button></div>`:""}</div>${wifeHtml}${children}</div>`;
+ }).join("");
+}
+window.drawTree=()=>{
+ const q=$("search").value.trim().toLowerCase();
+ if(q){
+  const found=people.filter(p=>p.name.toLowerCase().includes(q));
+  $("tree").innerHTML=found.length?found.map(p=>`<div class="person"><b>${esc(p.name)}</b></div>`).join(""):"لا توجد نتائج";
+  return;
+ }
+ const roots=people.filter(p=>!p.father_id);
+ $("tree").innerHTML=roots.length?roots.map(p=>`<div class="person"><b>${esc(p.name)}</b><div class="small">الجد المؤسس</div>${isAdmin?`<div class="admin-actions"><button class="secondary" onclick="editPerson('${p.id}')">تعديل</button><button class="danger" onclick="deletePerson('${p.id}')">حذف</button></div>`:""}</div>${wives.filter(w=>w.husband_id===p.id).map(w=>`<div class="wife">👩 الزوجة: <b>${esc(w.name)}</b>${isAdmin?`<div class="admin-actions"><button class="secondary" onclick="editWife('${w.id}')">تعديل</button><button class="danger" onclick="deleteWife('${w.id}')">حذف</button></div>`:""}</div>`).join("")}${branch(p.id,0,[p.id])}`).join(""):"لا توجد أسماء مسجلة حتى الآن.";
+};
+$("addPerson").addEventListener("submit",async e=>{
+ e.preventDefault();
+ try{
+  const fatherId=$("fatherSelect").value||null,motherId=$("motherSelect").value||null;
+  if(motherId&&!wives.some(w=>w.id===motherId&&w.husband_id===fatherId))throw Error("الأم المختارة ليست زوجة الأب المحدد");
+  const year=$("birthYear").value;
+  const {error}=await db.from("family_suggestions").insert({name:$("personName").value.trim(),father_id:fatherId,mother_id:motherId,gender:$("gender").value,birth_year:year?Number(year):null,notes:$("notes").value.trim()||null});
+  if(error)throw error;e.target.reset();updateMotherSelect();msg("personMessage","تم إرسال طلب إضافة الفرد للمراجعة.");
+ }catch(e){msg("personMessage","تعذر الإرسال: "+e.message)}
+});
+$("addWife").addEventListener("submit",async e=>{
+ e.preventDefault();
+ try{
+  const {error}=await db.from("family_wife_suggestions").insert({husband_id:$("husbandSelect").value,name:$("wifeName").value.trim(),notes:$("wifeNotes").value.trim()||null});
+  if(error)throw error;e.target.reset();msg("wifeMessage","تم إرسال طلب إضافة الزوجة للمراجعة.");
+ }catch(e){msg("wifeMessage","تعذر الإرسال: "+e.message)}
+});
+async function checkAdmin(){
+ const {data,error}=await db.rpc("is_family_admin");if(error)throw error;if(data!==true)throw Error("هذا الحساب غير مسجل كمسؤول");
+}
+async function showAdmin(){
+ await checkAdmin();isAdmin=true;$("loginPanel").classList.add("hidden");$("adminPanel").classList.remove("hidden");msg("authMessage","تم تسجيل الدخول بنجاح.");drawTree();await loadRequests();
+}
+$("loginForm").addEventListener("submit",async e=>{
+ e.preventDefault();$("loginButton").disabled=true;msg("authMessage","جار التحقق...");
+ try{const {error}=await db.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});if(error)throw error;await showAdmin()}
+ catch(e){await db.auth.signOut();msg("authMessage","تعذر الدخول: "+e.message)}
+ finally{$("loginButton").disabled=false}
+});
+async function loadRequests(){
+ try{
+  const [p,w]=await Promise.all([db.from("family_suggestions").select("*").order("created_at"),db.from("family_wife_suggestions").select("*").order("created_at")]);
+  if(p.error)throw p.error;if(w.error)throw w.error;
+  $("personRequests").innerHTML=p.data.length?p.data.map(s=>`<div class="suggestion"><b>${esc(s.name)}</b><p class="small">الأب: ${esc(person(s.father_id)?.name||"بدون")} · الأم: ${esc(wife(s.mother_id)?.name||"غير محددة")}</p>${esc(s.notes||"")}<div class="admin-actions"><button onclick="reviewPerson('${s.id}',true)">اعتماد</button><button class="danger" onclick="reviewPerson('${s.id}',false)">رفض</button></div></div>`).join(""):"لا توجد طلبات أفراد.";
+  $("wifeRequests").innerHTML=w.data.length?w.data.map(s=>`<div class="suggestion"><b>${esc(s.name)}</b><p class="small">الزوج: ${esc(person(s.husband_id)?.name||"غير معروف")}</p>${esc(s.notes||"")}<div class="admin-actions"><button onclick="reviewWife('${s.id}',true)">اعتماد</button><button class="danger" onclick="reviewWife('${s.id}',false)">رفض</button></div></div>`).join(""):"لا توجد طلبات زوجات.";
+ }catch(e){$("personRequests").textContent="تعذر تحميل الطلبات: "+e.message}
+}
+window.reviewPerson=async(id,yes)=>{
+ try{const {data,error}=await db.rpc(yes?"approve_family_suggestion":"reject_family_suggestion",{suggestion_id:id});if(error)throw error;await loadAll();await loadRequests();msg("authMessage",yes?"تم اعتماد الفرد.":"تم رفض الطلب.")}
+ catch(e){msg("authMessage","تعذر التنفيذ: "+e.message)}
+};
+window.reviewWife=async(id,yes)=>{
+ try{const {error}=await db.rpc(yes?"approve_family_wife_suggestion":"reject_family_wife_suggestion",{suggestion_id:id});if(error)throw error;await loadAll();await loadRequests();msg("authMessage",yes?"تم اعتماد الزوجة.":"تم رفض طلب الزوجة.")}
+ catch(e){msg("authMessage","تعذر التنفيذ: "+e.message)}
+};
+window.editPerson=async id=>{
+ const p=person(id);if(!p)return;
+ const name=prompt("الاسم الكامل:",p.name);if(name===null)return;
+ const gender=prompt("النوع (ذكر أو أنثى):",p.gender||"ذكر");if(gender===null)return;
+ const year=prompt("سنة الميلاد (اتركه فارغًا إن لم تعرف):",p.birth_year||"");if(year===null)return;
+ const notes=prompt("ملاحظات:",p.notes||"");if(notes===null)return;
+ try{const {error}=await db.from("family_members").update({name:name.trim(),gender,birth_year:year?Number(year):null,notes:notes||null}).eq("id",id);if(error)throw error;await loadAll();msg("authMessage","تم تعديل بيانات الفرد.")}
+ catch(e){alert("تعذر التعديل: "+e.message)}
+};
+window.deletePerson=async id=>{
+ const p=person(id);if(!p)return;
+ if(people.some(k=>k.father_id===id)){alert("لا يمكن حذف هذا الشخص قبل معالجة بيانات أبنائه.");return}
+ if(!confirm("هل تريد حذف "+p.name+"؟"))return;
+ try{const {error}=await db.from("family_members").delete().eq("id",id);if(error)throw error;await loadAll()}
+ catch(e){alert("تعذر الحذف: "+e.message)}
+};
+window.editWife=async id=>{
+ const w=wife(id);if(!w)return;const name=prompt("اسم الزوجة:",w.name);if(name===null)return;
+ const notes=prompt("ملاحظات:",w.notes||"");if(notes===null)return;
+ try{const {error}=await db.from("family_wives").update({name:name.trim(),notes:notes||null}).eq("id",id);if(error)throw error;await loadAll()}
+ catch(e){alert("تعذر تعديل الزوجة: "+e.message)}
+};
+window.deleteWife=async id=>{
+ const w=wife(id);if(!w)return;
+ if(people.some(p=>p.mother_id===id)){alert("لا يمكن حذف الزوجة لأنها مرتبطة بأبناء. عالج ارتباط الأبناء أولًا.");return}
+ if(!confirm("هل تريد حذف الزوجة "+w.name+"؟"))return;
+ try{const {error}=await db.from("family_wives").delete().eq("id",id);if(error)throw error;await loadAll()}
+ catch(e){alert("تعذر حذف الزوجة: "+e.message)}
+};
+window.logout=async()=>{await db.auth.signOut();isAdmin=false;$("adminPanel").classList.add("hidden");$("loginPanel").classList.remove("hidden");drawTree();msg("authMessage","تم تسجيل الخروج.")};
+(async()=>{await loadAll();try{const {data}=await db.auth.getSession();if(data.session)await showAdmin()}catch(e){}})();
+})();
+</script>
+</body>
+</html>
